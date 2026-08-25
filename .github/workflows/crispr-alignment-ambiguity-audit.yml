@@ -1,0 +1,69 @@
+name: crispr-alignment-ambiguity-audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "crispr_alignment_audit/**"
+      - ".github/workflows/crispr-alignment-ambiguity-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download pinned CRISPR-Bulge LFS archive
+        run: |
+          mkdir -p source
+          curl --fail --location --retry 5 --retry-all-errors \
+            https://media.githubusercontent.com/media/OrensteinLab/CRISPR-Bulge/main/files/datasets.zip \
+            --output source/CRISPR-Bulge-datasets.zip
+          ls -lh source/CRISPR-Bulge-datasets.zip
+          sha256sum source/CRISPR-Bulge-datasets.zip
+      - name: Run frozen ambiguity audit
+        run: |
+          python crispr_alignment_audit/audit.py \
+            --archive source/CRISPR-Bulge-datasets.zip \
+            --outdir results/crispr_alignment_audit
+      - name: Print report and compact group counts
+        run: |
+          cat results/crispr_alignment_audit/REPORT.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("results/crispr_alignment_audit/audit.json").read_text())
+          print(json.dumps({
+              "source": data["source"],
+              "resolved_members": data["resolved_members"],
+              "metrics": data["metrics"],
+              "gates": data["gates"],
+              "decision": data["decision"],
+              "groups": [
+                  {
+                      "group": item["group"],
+                      "archive_member": item["archive_member"],
+                      "counts": item["counts"],
+                      "ambiguity_counts": item["ambiguity_counts"],
+                      "active_ambiguous_distinct_sgRNAs": item["active_ambiguous_distinct_sgRNAs"],
+                      "active_gap_span_ge_2_fraction": item["active_gap_span_ge_2_fraction"],
+                      "activity_rule_counts": item["activity_rule_counts"],
+                  }
+                  for item in data["groups"]
+              ],
+          }, indent=2))
+          PY
+      - name: Hash audit outputs
+        run: find results/crispr_alignment_audit -type f -print0 | sort -z | xargs -0 sha256sum > results/crispr_alignment_audit/FILES.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispr-alignment-ambiguity-audit-${{ github.run_id }}
+          path: results/crispr_alignment_audit
+          if-no-files-found: error
+          compression-level: 9
