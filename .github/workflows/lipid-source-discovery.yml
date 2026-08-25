@@ -1,0 +1,41 @@
+name: lipid-native-source-discovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "lipid_lattice_audit/discover_sources.py"
+      - ".github/workflows/lipid-source-discovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Discover GNPS and publication sources
+        run: python lipid_lattice_audit/discover_sources.py --outdir results/lipid_source_discovery
+      - name: Print discovery report
+        run: |
+          cat results/lipid_source_discovery/REPORT.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("results/lipid_source_discovery/discovery.json").read_text())
+          print(json.dumps(data, indent=2))
+          PY
+      - name: Record hashes
+        run: find results/lipid_source_discovery -type f -print0 | sort -z | xargs -0 sha256sum > results/lipid_source_discovery/FILES.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lipid-native-source-discovery-${{ github.run_id }}
+          path: results/lipid_source_discovery
+          if-no-files-found: error
+          compression-level: 9
