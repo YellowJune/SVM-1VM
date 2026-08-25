@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      CRISPR_ARCHIVE: ${{ runner.temp }}/crispr-bulge-datasets.zip
-      CRISPR_SOURCE_REPO: ${{ runner.temp }}/CRISPR-Bulge
+      CRISPR_ARCHIVE: /tmp/crispr-bulge-datasets.zip
+      CRISPR_SOURCE_REPO: /tmp/CRISPR-Bulge
       RESULT_DIR: results/crispr_alignment_phase_a
       EXPECTED_SOURCE_COMMIT: 3eddcd5bfcaff00b2bdf29425116ec9756ace870
       EXPECTED_ARCHIVE_SHA256: f892f70ba4ac3b05b03b2171b4ad38746630de08ad630e650f355dd61203eab0
@@ -29,7 +29,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-          cache: pip
 
       - name: Install pinned published-model runtime
         run: |
