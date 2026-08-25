@@ -1,0 +1,29 @@
+name: RNA page-gauge source discovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "rna_page_gauge_audit/discover_downloads.py"
+      - ".github/workflows/rna-page-gauge-discovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Discover official bpRNA downloads
+        run: python rna_page_gauge_audit/discover_downloads.py
+      - name: Upload immutable discovery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rna-page-gauge-source-discovery-v0.1.0
+          path: rna_page_gauge_audit/discovery/
+          if-no-files-found: error
