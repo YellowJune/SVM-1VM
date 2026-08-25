@@ -1,0 +1,42 @@
+name: lipid-lattice-feasibility-audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "lipid_lattice_audit/**"
+      - ".github/workflows/lipid-lattice-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download and audit GNPS PNNL lipid libraries
+        run: python lipid_lattice_audit/audit_gnps.py --outdir results/lipid_lattice_audit
+      - name: Record artifact hashes
+        run: |
+          find results/lipid_lattice_audit -type f -print0 | sort -z | xargs -0 sha256sum > results/lipid_lattice_audit/FILES.sha256
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("results/lipid_lattice_audit/audit.json")
+          result = json.loads(p.read_text())
+          print(json.dumps({"gates": result["gates"], "metrics": result["metrics"]}, indent=2))
+          if not result["numeric_gate_pass"]:
+              raise SystemExit("preregistered numerical gate failed")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lipid-lattice-feasibility-audit-${{ github.run_id }}
+          path: results/lipid_lattice_audit
+          if-no-files-found: error
+          compression-level: 9
