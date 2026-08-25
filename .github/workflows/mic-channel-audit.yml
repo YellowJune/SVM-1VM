@@ -1,0 +1,43 @@
+name: MIC channel raw-label audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/mic-channel-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime dependency
+        run: python -m pip install --upgrade pip requests
+
+      - name: Audit stratified raw DBAASP sample
+        run: >
+          python mic_channel_audit/audit_dbaasp_raw.py
+          --sample-n 3000
+          --workers 8
+          --out-dir audit_output
+
+      - name: Upload audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mic-channel-raw-audit-v0.1.0
+          path: audit_output/
+          if-no-files-found: error
+          retention-days: 7
