@@ -43,16 +43,17 @@ def main():
     if not isinstance(rows, list):
         raise TypeError(f"unexpected GNPS library list payload: {type(rows)!r}")
     lipid_rows = []
+    row_field_names = set()
     for row in rows:
         if isinstance(row, str):
-            name = row
-            normalized = {"libraryname": row}
+            normalized = {"value": row}
         elif isinstance(row, dict):
-            name = str(lower_field(row, ["libraryname", "library_name", "name"]) or "")
             normalized = row
+            row_field_names.update(str(key) for key in row)
         else:
             continue
-        if "LIPID" in name.upper():
+        searchable = json.dumps(normalized, sort_keys=True, ensure_ascii=False)
+        if "LIPID" in searchable.upper():
             lipid_rows.append(normalized)
     (outdir / "lipid_libraries.json").write_text(
         json.dumps(lipid_rows, indent=2), encoding="utf-8"
@@ -134,9 +135,26 @@ def main():
             "sha256": hashlib.sha256(raw).hexdigest(),
             "total_rows": len(rows),
             "lipid_rows": len(lipid_rows),
+            "row_field_names": sorted(row_field_names),
+            "row_samples": rows[:5],
+            "lipid_rows_raw": lipid_rows,
             "lipid_library_names": [
-                str(lower_field(row, ["libraryname", "library_name", "name"]) or row)
-                if isinstance(row, dict) else str(row)
+                str(
+                    lower_field(
+                        row,
+                        [
+                            "libraryname",
+                            "library_name",
+                            "name",
+                            "dataset",
+                            "identifier",
+                            "value",
+                        ],
+                    )
+                    or row
+                )
+                if isinstance(row, dict)
+                else str(row)
                 for row in lipid_rows
             ],
         },
