@@ -82,7 +82,7 @@ def main():
         article_text = article_raw.decode("utf-8", errors="replace")
         (outdir / "lipidetective_article.html").write_bytes(article_raw)
         zip_match = re.search(
-            r"https?://[^\\\"']+supplementary-material_bbag378\\.zip[^\\\"']*",
+            r"""https?://[^"']+supplementary-material_bbag378\.zip[^"']*""",
             html.unescape(article_text),
         )
     except Exception as exc:
