@@ -1,0 +1,102 @@
+name: crispr-alignment-phase-a
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "crispr_alignment_audit/phase_a_instability.py"
+      - ".github/workflows/crispr-alignment-phase-a.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CRISPR_ARCHIVE: ${{ runner.temp }}/crispr-bulge-datasets.zip
+      CRISPR_SOURCE_REPO: ${{ runner.temp }}/CRISPR-Bulge
+      RESULT_DIR: results/crispr_alignment_phase_a
+      EXPECTED_SOURCE_COMMIT: 3eddcd5bfcaff00b2bdf29425116ec9756ace870
+      EXPECTED_ARCHIVE_SHA256: f892f70ba4ac3b05b03b2171b4ad38746630de08ad630e650f355dd61203eab0
+      TF_CPP_MIN_LOG_LEVEL: "2"
+      CUDA_VISIBLE_DEVICES: "-1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install pinned published-model runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: \
+            numpy==1.23.5 \
+            pandas==2.0.2 \
+            scikit-learn==1.2.2 \
+            scipy==1.10.1 \
+            tensorflow-cpu==2.12.0 \
+            xgboost==2.0.1 \
+            catboost==1.2.2
+
+      - name: Clone pinned CRISPR-Bulge source without LFS archive smudge
+        run: |
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 \
+            https://github.com/OrensteinLab/CRISPR-Bulge.git \
+            "$CRISPR_SOURCE_REPO"
+          test "$(git -C "$CRISPR_SOURCE_REPO" rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
+
+      - name: Download and verify pinned dataset archive
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output "$CRISPR_ARCHIVE" \
+            https://media.githubusercontent.com/media/OrensteinLab/CRISPR-Bulge/main/files/datasets.zip
+          test "$(stat --format=%s "$CRISPR_ARCHIVE")" = "524400344"
+          test "$(sha256sum "$CRISPR_ARCHIVE" | cut -d' ' -f1)" = "$EXPECTED_ARCHIVE_SHA256"
+
+      - name: Run frozen Phase-A instability audit
+        run: |
+          python crispr_alignment_audit/phase_a_instability.py \
+            --archive "$CRISPR_ARCHIVE" \
+            --source-repo "$CRISPR_SOURCE_REPO" \
+            --outdir "$RESULT_DIR" \
+            --inactive-limit 100000
+
+      - name: Record environment and output hashes
+        if: always()
+        run: |
+          mkdir -p "$RESULT_DIR"
+          python -m pip freeze > "$RESULT_DIR/pip-freeze.txt"
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root = Path("results/crispr_alignment_phase_a")
+          lines = []
+          for path in sorted(root.rglob("*")):
+              if path.is_file() and path.name != "FILES.sha256":
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  lines.append(f"{digest}  {path.as_posix()}")
+          (root / "FILES.sha256").write_text("\n".join(lines) + "\n")
+          PY
+
+      - name: Print frozen report
+        if: always()
+        run: |
+          if test -f "$RESULT_DIR/REPORT.md"; then
+            sed -n '1,160p' "$RESULT_DIR/REPORT.md"
+          fi
+          if test -f "$RESULT_DIR/metrics.json"; then
+            python -m json.tool "$RESULT_DIR/metrics.json"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crispr-alignment-phase-a-${{ github.run_id }}
+          path: results/crispr_alignment_phase_a
+          if-no-files-found: error
+          compression-level: 9
