@@ -383,7 +383,7 @@ def ordering_flip_fraction(active_summary: pd.DataFrame, pair_count: int = 100_0
             j += 1
         i_min, i_max = intervals[i]
         j_min, j_max = intervals[j]
-        can_reverse = (i_min < j_max) and (i_max > j_min)
+        # Technical fix 2026-08-25: preserve truth value as JSON-safe Python bool.\n        can_reverse = bool((i_min < j_max) and (i_max > j_min))
         flips += can_reverse
         used += 1
     return flips / used if used else 0.0, used
