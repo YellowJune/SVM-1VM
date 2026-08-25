@@ -73,40 +73,58 @@ def main():
     ]
 
     article_url = "https://academic.oup.com/bib/article/27/4/bbag378/8742281"
-    article_raw = fetch(article_url)
-    article_text = article_raw.decode("utf-8", errors="replace")
-    (outdir / "lipidetective_article.html").write_bytes(article_raw)
-    zip_match = re.search(
-        r'https?://[^"\']+supplementary-material_bbag378\.zip[^"\']*',
-        html.unescape(article_text),
-    )
     supp_manifest = []
     supp_text_files = []
+    zip_match = None
+    article_error = None
+    try:
+        article_raw = fetch(article_url)
+        article_text = article_raw.decode("utf-8", errors="replace")
+        (outdir / "lipidetective_article.html").write_bytes(article_raw)
+        zip_match = re.search(
+            r'https?://[^"\\']+supplementary-material_bbag378\\.zip[^"\\']*',
+            html.unescape(article_text),
+        )
+    except Exception as exc:
+        article_error = f"{type(exc).__name__}: {exc}"
+        (outdir / "lipidetective_article_error.txt").write_text(
+            article_error + "\n", encoding="utf-8"
+        )
+
     if zip_match:
         supp_url = zip_match.group(0).replace("&amp;", "&")
-        supp_raw = fetch(supp_url)
-        (outdir / "lipidetective_supplementary.zip").write_bytes(supp_raw)
-        supp_manifest.append({
-            "url": supp_url,
-            "bytes": len(supp_raw),
-            "sha256": hashlib.sha256(supp_raw).hexdigest(),
-        })
-        with zipfile.ZipFile(io.BytesIO(supp_raw)) as archive:
-            for info in archive.infolist():
-                supp_manifest.append({
-                    "path": info.filename,
-                    "bytes": info.file_size,
-                    "compressed_bytes": info.compress_size,
-                })
-                if info.filename.lower().endswith((".txt", ".csv", ".tsv", ".md")):
-                    data = archive.read(info)
-                    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", info.filename)
-                    target = outdir / "supplementary_text" / safe
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(data)
-                    supp_text_files.append(str(target.relative_to(outdir)))
+        try:
+            supp_raw = fetch(supp_url)
+            (outdir / "lipidetective_supplementary.zip").write_bytes(supp_raw)
+            supp_manifest.append({
+                "url": supp_url,
+                "bytes": len(supp_raw),
+                "sha256": hashlib.sha256(supp_raw).hexdigest(),
+            })
+            with zipfile.ZipFile(io.BytesIO(supp_raw)) as archive:
+                for info in archive.infolist():
+                    supp_manifest.append({
+                        "path": info.filename,
+                        "bytes": info.file_size,
+                        "compressed_bytes": info.compress_size,
+                    })
+                    if info.filename.lower().endswith((".txt", ".csv", ".tsv", ".md")):
+                        data = archive.read(info)
+                        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", info.filename)
+                        target = outdir / "supplementary_text" / safe
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(data)
+                        supp_text_files.append(str(target.relative_to(outdir)))
+        except Exception as exc:
+            supp_manifest.append({
+                "url": supp_url,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
     else:
-        supp_manifest.append({"error": "supplementary zip link not found in article HTML"})
+        supp_manifest.append({
+            "error": "supplementary zip link not found or article fetch blocked",
+            "article_error": article_error,
+        })
 
     result = {
         "version": "0.1.0",
