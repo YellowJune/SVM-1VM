@@ -177,24 +177,38 @@ def main():
     records_by_library = {}
     for library in LIBRARIES:
         url = f"{BASE}/{library}.json"
-        raw = fetch(url)
-        payload = json.loads(raw)
-        rows = payload if isinstance(payload, list) else payload.get(
-            "spectra", payload.get("data", [])
-        )
-        if not isinstance(rows, list):
-            raise TypeError(f"unexpected payload for {library}: {type(rows)!r}")
-        rows = [row for row in rows if isinstance(row, dict)]
-        records_by_library[library] = rows
-        manifests.append(
-            {
-                "library": library,
-                "url": url,
-                "bytes": len(raw),
-                "sha256": hashlib.sha256(raw).hexdigest(),
-                "records": len(rows),
-            }
-        )
+        try:
+            raw = fetch(url)
+            payload = json.loads(raw)
+            rows = payload if isinstance(payload, list) else payload.get(
+                "spectra", payload.get("data", [])
+            )
+            if not isinstance(rows, list):
+                raise TypeError(f"unexpected payload for {library}: {type(rows)!r}")
+            rows = [row for row in rows if isinstance(row, dict)]
+            records_by_library[library] = rows
+            manifests.append(
+                {
+                    "library": library,
+                    "url": url,
+                    "bytes": len(raw),
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "records": len(rows),
+                    "error": None,
+                }
+            )
+        except Exception as exc:
+            records_by_library[library] = []
+            manifests.append(
+                {
+                    "library": library,
+                    "url": url,
+                    "bytes": 0,
+                    "sha256": None,
+                    "records": 0,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
 
     pnnl_species = collections.defaultdict(set)
     pnnl_fine_counts = collections.Counter()
@@ -300,7 +314,13 @@ def main():
         "largest_library_fraction_le_0_90": max_source_fraction <= 0.90,
         "all_sources_hashed": (
             len(manifests) == len(LIBRARIES)
-            and all(item["bytes"] > 0 and len(item["sha256"]) == 64 for item in manifests)
+            and all(
+                item["error"] is None
+                and item["bytes"] > 0
+                and item["sha256"] is not None
+                and len(item["sha256"]) == 64
+                for item in manifests
+            )
         ),
     }
     result = {
