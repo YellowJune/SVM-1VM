@@ -1,0 +1,36 @@
+name: lipid-native-coarse-audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "lipid_lattice_audit/audit_native_sources.py"
+      - "lipid_lattice_audit/PREREGISTRATION_NATIVE.md"
+      - ".github/workflows/lipid-native-coarse-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run frozen native-coarse audit
+        run: python lipid_lattice_audit/audit_native_sources.py --outdir results/lipid_native_audit
+      - name: Print report and machine-readable result
+        run: |
+          cat results/lipid_native_audit/REPORT.md
+          python -m json.tool results/lipid_native_audit/native_audit.json
+      - name: Hash result files
+        run: find results/lipid_native_audit -type f -print0 | sort -z | xargs -0 sha256sum > results/lipid_native_audit/FILES.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lipid-native-coarse-audit-${{ github.run_id }}
+          path: results/lipid_native_audit
+          if-no-files-found: error
+          compression-level: 9
