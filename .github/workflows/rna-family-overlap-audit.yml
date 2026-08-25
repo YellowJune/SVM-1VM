@@ -1,0 +1,38 @@
+name: ncRNA family-overlap audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/rna-family-overlap-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Audit released RNA benchmark
+        run: >
+          python rna_family_audit/audit_family_overlap.py
+          --out-dir rna_family_audit_output
+
+      - name: Upload audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rna-family-overlap-audit-v0.1.0
+          path: rna_family_audit_output/
+          if-no-files-found: error
+          retention-days: 7
